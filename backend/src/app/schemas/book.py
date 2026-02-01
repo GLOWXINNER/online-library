@@ -26,10 +26,9 @@ class BookCreateRequest(BaseSchema):
     description: str | None = None
     year: int = Field(ge=0, le=2100)
     isbn: str | None = Field(default=None, max_length=32)
+    authors: list[int] | list[str] = Field(min_length=1)
+    genres: list[int] | list[str] = Field(min_length=1)
 
-    # В MVP удобнее принимать имена, чтобы создать книгу одним запросом
-    authors: list[str] = Field(min_length=1)
-    genres: list[str] = Field(min_length=1)
 
     @field_validator("title")
     @classmethod
@@ -49,14 +48,22 @@ class BookCreateRequest(BaseSchema):
 
     @field_validator("authors", "genres")
     @classmethod
-    def normalize_list_names(cls, v: list[str]) -> list[str]:
+    def normalize_list(cls, v):
+        # ids
+        if v and isinstance(v[0], int):
+            cleaned = sorted(set(int(x) for x in v))
+            if not cleaned:
+                raise ValueError("list must contain at least one value")
+            return cleaned
+
+        # names
         cleaned: list[str] = []
         for item in v:
-            item = item.strip()
-            if not item:
+            s = str(item).strip()
+            if not s:
                 continue
-            if item not in cleaned:
-                cleaned.append(item)
+            if s not in cleaned:
+                cleaned.append(s)
         if not cleaned:
             raise ValueError("list must contain at least one non-empty value")
         return cleaned
