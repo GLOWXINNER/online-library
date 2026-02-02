@@ -144,12 +144,25 @@ async def create_user(client: AsyncClient) -> Callable[..., dict]:
 
 
 @pytest_asyncio.fixture(scope="function")
-async def get_token(create_user: Callable[..., dict]) -> Callable[..., dict]:
-    """
-    Пока dev-auth через X-User-Id -> возвращаем headers.
-    """
+async def login_user(client: AsyncClient) -> Callable[..., dict]:
+    """Login existing user and return Authorization headers."""
+
+    async def _login_user(email: str = "user@example.com", password: str = "strong_password_123") -> dict:
+        resp = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        token = data["access_token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    return _login_user
+
+
+@pytest_asyncio.fixture(scope="function")
+async def get_token(create_user: Callable[..., dict], login_user: Callable[..., dict]) -> Callable[..., dict]:
+    """Create user (register) and return Bearer JWT headers."""
+
     async def _get_token(email: str = "user@example.com", password: str = "strong_password_123") -> dict:
-        user = await create_user(email=email, password=password)
-        return {"X-User-Id": str(user["id"])}
+        await create_user(email=email, password=password)
+        return await login_user(email=email, password=password)
 
     return _get_token

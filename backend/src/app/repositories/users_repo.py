@@ -16,6 +16,11 @@ class UsersRepository:
         res = await self.session.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def get_by_id(self, user_id: int) -> User | None:
+        stmt = select(User).where(User.id == user_id)
+        res = await self.session.execute(stmt)
+        return res.scalar_one_or_none()
+
     async def create(self, *, email: str, password_hash: str) -> User:
         user = User(email=email, password_hash=password_hash)  # роль по умолчанию: client
         self.session.add(user)

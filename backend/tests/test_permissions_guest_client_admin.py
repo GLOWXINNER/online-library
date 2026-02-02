@@ -85,6 +85,7 @@ async def test_client_cannot_write_books_and_export_csv(
 async def test_admin_can_export_csv_and_manage_books(
     client: AsyncClient,
     create_user,
+    login_user,
     async_session: AsyncSession,
 ):
     books_base = await _detect_books_base(client)
@@ -100,7 +101,8 @@ async def test_admin_can_export_csv_and_manage_books(
     )
     await async_session.commit()
 
-    headers_admin = {"X-User-Id": str(admin_id)}
+    # логинимся после апдейта роли, чтобы role в JWT совпадала
+    headers_admin = await login_user(email="admin1@example.com", password="strong_password_123")
 
     author_id, genre_id = await _seed_author_genre(async_session)
 

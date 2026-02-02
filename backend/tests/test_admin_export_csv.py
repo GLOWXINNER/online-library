@@ -15,6 +15,7 @@ async def test_admin_export_forbidden_for_client(client: AsyncClient, get_token)
 async def test_admin_export_csv_ok(
     client: AsyncClient,
     create_user,
+    login_user,
     async_session: AsyncSession,
 ):
     # создаём пользователя
@@ -47,8 +48,8 @@ async def test_admin_export_csv_ok(
 
     await async_session.commit()
 
-    # запрос от admin
-    headers = {"X-User-Id": str(user_id)}
+    # запрос от admin (через JWT login)
+    headers = await login_user(email="admin@example.com", password="strong_password_123")
     r = await client.get("/api/v1/admin/books/export.csv", headers=headers)
     assert r.status_code == 200, r.text
 
