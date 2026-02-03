@@ -1,14 +1,46 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import get_current_user
 from app.core.db import get_session
+from app.models.book import Book
+from app.models.favorite import Favorite
 from app.models.user import User
+from app.schemas.book import BookListItemResponse
 from app.services.favorites_service import FavoritesService
 
 router = APIRouter(prefix="/users/me", tags=["users"])
+
+
+@router.get("/favorites", response_model=list[BookListItemResponse])
+async def list_favorites(
+    session: AsyncSession = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[BookListItemResponse]:
+    stmt = (
+        select(Book)
+        .join(Favorite, Favorite.book_id == Book.id)
+        .where(Favorite.user_id == current_user.id)
+        .options(selectinload(Book.authors), selectinload(Book.genres))
+        .order_by(Book.id)
+    )
+    res = await session.execute(stmt)
+    books = res.scalars().unique().all()
+
+    return [
+        BookListItemResponse(
+            id=b.id,
+            title=b.title,
+            year=b.year,
+            authors=[a.name for a in (b.authors or [])],
+            genres=[g.name for g in (b.genres or [])],
+        )
+        for b in books
+    ]
 
 
 @router.post("/favorites/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
