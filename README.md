@@ -1,4 +1,4 @@
-## 1) README.md (полный текст)
+## 1) README.md 
 
 ````md
 # Online Library — Docker stack + Telegram Bot + Telegram Mini App
