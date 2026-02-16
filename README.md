@@ -1,25 +1,27 @@
 ## 1) README.md (полный текст)
 
 ````md
-# Online Library — API + Telegram Bot + Telegram Mini App
+# Online Library — Docker stack + Telegram Bot + Telegram Mini App
 
-Монорепозиторий онлайн-библиотеки:
+Репозиторий содержит:
 - **Backend API**: FastAPI + async SQLAlchemy + Alembic + PostgreSQL
 - **Telegram Bot**: aiogram 3
 - **Telegram Mini App**: Vite + React + TypeScript
-- **Инфраструктура**: Docker Compose (DB, API, pgAdmin, тестовая DB)
+- **Инфраструктура**: Docker Compose (DB, API, pgAdmin, DB_test, Bot)
 
-> Примеры команд ниже рассчитаны на Windows PowerShell и путь `A:\online-library`.
-> При необходимости адаптируй под свою ОС.
+✅ **Официальный режим запуска проекта (как у нас):**
+- **всё серверное** (API + DB + pgAdmin + DB_test + Bot) — **в Docker**
+- **miniapp** — **локально** (Vite dev server)
 
 ---
 
 ## Содержание
-- [1. Быстрый старт (Docker)](#1-быстрый-старт-docker)
+- [0. Требования](#0-требования)
+- [1. Запуск всего стека в Docker](#1-запуск-всего-стека-в-docker)
 - [2. Миграции Alembic](#2-миграции-alembic)
-- [3. Запуск API локально из PyCharm](#3-запуск-api-локально-из-pycharm)
-- [4. Создание пользователя и выдача admin через CLI](#4-создание-пользователя-и-выдача-admin-через-cli)
-- [5. Тесты pytest](#5-тесты-pytest)
+- [3. Запуск API локально из PyCharm (опционально)](#3-запуск-api-локально-из-pycharm-опционально)
+- [4. Создать пользователя и выдать admin через CLI](#4-создать-пользователя-и-выдать-admin-через-cli)
+- [5. Прогон pytest](#5-прогон-pytest)
 - [6. Проверка export.csv](#6-проверка-exportcsv)
 - [7. Запуск Telegram Bot](#7-запуск-telegram-bot)
 - [8. Запуск Mini App](#8-запуск-mini-app)
@@ -27,14 +29,17 @@
 
 ---
 
-## 1. Быстрый старт (Docker)
+## 0. Требования
 
-### Требования
 - Docker Desktop
-- Python 3.11 (для локального запуска/тестов)
-- Node.js (для miniapp)
+- Python 3.11 (для локального запуска/pytest/CLI из PyCharm)
+- Node.js + npm (для miniapp)
 
-### Поднять стек в Docker (DB + API + pgAdmin + DB_test + Bot)
+---
+
+## 1. Запуск всего стека в Docker
+
+### 1.1 Поднять стек (DB + API + pgAdmin + DB_test + Bot)
 Из корня репозитория:
 
 ```powershell
@@ -44,17 +49,17 @@ docker compose -f .\infra\docker-compose.stack.yml up -d --build
 
 Проверки:
 
-* API docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+* Swagger /docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 * pgAdmin: [http://127.0.0.1:5050](http://127.0.0.1:5050)
 
-Посмотреть логи:
+Логи:
 
 ```powershell
 docker compose -f .\infra\docker-compose.stack.yml logs -f api
 docker compose -f .\infra\docker-compose.stack.yml logs -f bot
 ```
 
-Остановить:
+Остановить стек:
 
 ```powershell
 docker compose -f .\infra\docker-compose.stack.yml down
@@ -64,202 +69,188 @@ docker compose -f .\infra\docker-compose.stack.yml down
 
 ## 2. Миграции Alembic
 
-### Применить миграции в Docker
+### 2.1 Применить миграции вручную в Docker
 
-Если API контейнер уже поднят:
+Если API контейнер поднят:
 
 ```powershell
 docker compose -f .\infra\docker-compose.stack.yml exec api alembic upgrade head
 ```
 
-### Создать новую миграцию (пример)
+### 2.2 Создать новую миграцию (пример)
 
 ```powershell
-docker compose -f .\infra\docker-compose.stack.yml exec api alembic revision --autogenerate -m "add_field_x"
+docker compose -f .\infra\docker-compose.stack.yml exec api alembic revision --autogenerate -m "my_migration"
 ```
 
-> В нашем docker-compose миграции могут выполняться автоматически при старте API (если это задано в `command`).
+> Примечание: если в `docker-compose.stack.yml` миграции запускаются автоматически при старте API, то ручной шаг не обязателен.
+> Но команда выше — “железный” способ убедиться, что база на актуальной версии.
 
 ---
 
-## 3. Запуск API локально из PyCharm
+## 3. Запуск API локально из PyCharm (опционально)
 
-### 3.1 Подготовка окружения
+Этот режим нужен, если хочешь дебажить API в PyCharm, при этом DB остаётся в Docker.
 
-1. Открыть проект `A:\online-library` в PyCharm
-2. Создать/выбрать интерпретатор Python 3.11 (venv)
-3. Установить зависимости backend (выбери свой способ):
-
-* если `requirements.txt`:
+### Вариант A (рекомендую): остановить только контейнер API и запустить локально на 8000
 
 ```powershell
-cd A:\online-library\backend
-pip install -r requirements.txt
+cd A:\online-library
+docker compose -f .\infra\docker-compose.stack.yml stop api
 ```
 
-* если Poetry — установить через Poetry и выполнить `poetry install`
+Теперь локально из PyCharm запускай `uvicorn` на **8000**.
 
-### 3.2 Переменные окружения
+### Вариант B: оставить контейнер API и запустить локально на 8001
 
-Создай `backend/.env` (или настрой EnvFile в Run Configuration). Минимально нужно:
+Локальный запуск:
 
-* `DATABASE_URL` (локально может быть `localhost:5432`, в docker — `db:5432`)
-* `JWT_SECRET` и др.
+* порт `8001`
+* miniapp/.env временно укажи `http://127.0.0.1:8001/api/v1`
 
-Пример:
+---
+
+### 3.1 Переменные окружения для локального API
+
+При локальном запуске (API на хосте), Postgres остаётся в Docker на порту 5432, поэтому `DATABASE_URL` должен указывать на `127.0.0.1`:
 
 ```env
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/online_library
-JWT_SECRET=CHANGE_ME
-CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/online_library
+JWT_SECRET=CHANGE_ME_SUPER_SECRET
+JWT_ALG=HS256
+JWT_EXPIRES_MIN=60
 ```
 
-### 3.3 Запуск uvicorn из PyCharm
-
-Запускай модуль/скрипт (пример):
-
-* Module: `uvicorn`
-* Parameters:
-
-  * `app.main:app --reload --host 127.0.0.1 --port 8000`
-* Working directory: `A:\online-library\backend\src`
-* Env file: `backend/.env`
-
-Проверка:
-
-* [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+> В Docker-режиме `DATABASE_URL` обычно указывает на `db:5432`. Для локального режима нужен `127.0.0.1:5432`.
+> Удобно иметь два env-файла: `.env.docker` и `.env.local`.
 
 ---
 
-## 4. Создание пользователя и выдача admin через CLI
-
-> Реализация команды зависит от проекта. Ниже — рекомендуемый интерфейс CLI.
-> Если в проекте уже есть `python -m app.cli ...` — используй его.
+## 4. Создать пользователя и выдать admin через CLI
 
 ### 4.1 Создать пользователя
 
-**В Docker:**
+Создание пользователя делается через API (это “официальный” путь):
+
+* через Swagger: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+  Endpoint: `POST /api/v1/auth/register`
+* или через Mini App (страница Register)
+
+### 4.2 Выдать роль admin через CLI (реально в проекте есть команда)
+
+CLI находится в backend: `python -m app.cli`
+
+Команда смены роли:
+
+* роли: `admin` или `client`
+* параметр: email
+
+#### В Docker:
 
 ```powershell
-docker compose -f .\infra\docker-compose.stack.yml exec api python -m app.cli create-user --email user@example.com --password 123456
+docker compose -f .\infra\docker-compose.stack.yml exec api python -m app.cli set-role --email admin@example.com --role admin
 ```
 
-**Локально:**
+#### Локально (если запускаешь backend в venv):
 
 ```powershell
 cd A:\online-library\backend\src
-python -m app.cli create-user --email user@example.com --password 123456
-```
-
-### 4.2 Сделать пользователя admin
-
-**В Docker:**
-
-```powershell
-docker compose -f .\infra\docker-compose.stack.yml exec api python -m app.cli make-admin --email user@example.com
-```
-
-**Локально:**
-
-```powershell
-cd A:\online-library\backend\src
-python -m app.cli make-admin --email user@example.com
+python -m app.cli set-role --email admin@example.com --role admin
 ```
 
 ---
 
-## 5. Тесты pytest
+## 5. Прогон pytest
+
+Тесты используют отдельную тестовую БД на `localhost:5433` (контейнер `db_test`).
 
 ### 5.1 Поднять тестовую БД
 
-В docker-compose у нас есть `db_test` на `localhost:5433`.
-
-Убедись, что она запущена:
+Если поднимаешь весь стек — она уже есть. Если нужно отдельно:
 
 ```powershell
+cd A:\online-library
 docker compose -f .\infra\docker-compose.stack.yml up -d db_test
 ```
 
-### 5.2 Запуск тестов локально
+### 5.2 Запустить тесты (локально)
 
 ```powershell
 cd A:\online-library\backend
 pytest -q
 ```
 
-Если в тестах используется переменная `DATABASE_URL_TEST`, задай её:
+Опционально можно переопределить URL тестовой БД:
 
-```env
-DATABASE_URL_TEST=postgresql+asyncpg://postgres:postgres@localhost:5433/online_library_test
+```powershell
+$env:TEST_DATABASE_URL="postgresql+asyncpg://postgres:postgres@127.0.0.1:5433/online_library_test"
+pytest -q
 ```
+
+> В conftest тесты сами прогоняют миграции на test DB перед запуском.
 
 ---
 
 ## 6. Проверка export.csv
 
-В админ-панели бота/API есть экспорт CSV (например, список книг).
+Экспорт CSV доступен только админу:
+`GET /api/v1/admin/books/export.csv`
 
-### 6.1 Запуск экспорта
+### 6.1 Получить JWT токен
 
-Варианты:
+1. Зарегистрируй пользователя (`/auth/register`)
+2. Сделай его admin через CLI (см. раздел 4.2)
+3. Логин (`/auth/login`) → получи `access_token`
 
-* Через бот (кнопка/команда Admin → Export CSV)
-* Через API endpoint (если реализован): `/api/v1/admin/export`
-
-### 6.2 Где искать файл
-
-Типовой вариант:
-
-* Файл сохраняется внутри контейнера API/бота (путь зависит от реализации)
-* Либо возвращается как **download response** (в браузере скачивается сразу)
-
-Если файл сохраняется внутри контейнера, можно вытащить:
+### 6.2 Скачать CSV через curl (Windows)
 
 ```powershell
-docker cp online_library_api:/app/export.csv .\export.csv
+curl.exe -L -o books.csv -H "Authorization: Bearer <JWT_TOKEN>" `
+  "http://127.0.0.1:8000/api/v1/admin/books/export.csv"
 ```
 
-Проверка содержимого:
+Проверка файла:
 
 ```powershell
-type .\export.csv
+type .\books.csv
 ```
+
+Ожидаемые признаки:
+
+* Content-Type: `text/csv`
+* Content-Disposition: `attachment; filename="books.csv"`
+* Заголовки CSV: `id,title,year,isbn,authors,genres`
 
 ---
 
 ## 7. Запуск Telegram Bot
 
-### 7.1 В Docker (рекомендуется в нашем стеке)
+### 7.1 В Docker (официальный режим)
 
-1. Укажи в `bot/.env`:
+1. Заполни `bot/.env`:
 
 ```env
-BOT_TOKEN=YOUR_TOKEN
+BOT_TOKEN=PASTE_YOUR_TOKEN_HERE
+# Опционально: ссылка miniapp (нужна для кнопки WEB), должна быть https
 MINIAPP_URL=https://YOUR_HTTPS_MINIAPP_URL
 ```
 
 2. Перезапусти бота:
 
 ```powershell
+cd A:\online-library
 docker compose -f .\infra\docker-compose.stack.yml restart bot
 docker compose -f .\infra\docker-compose.stack.yml logs -f bot
 ```
 
-> Внутри Docker бот обращается к API по `http://api:8000/api/v1` (это настроено в compose).
-
-### 7.2 Локально (альтернатива)
-
-```powershell
-cd A:\online-library\bot
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python -m bot_app
-```
+> В Docker бот обращается к API по внутреннему адресу (обычно задано в compose):
+> `http://api:8000/api/v1`
 
 ---
 
 ## 8. Запуск Mini App
+
+Mini App запускается локально.
 
 ### 8.1 Установка и запуск
 
@@ -269,9 +260,9 @@ npm install
 npm run dev
 ```
 
-По умолчанию:
+Открыть:
 
-* [http://localhost:5173/#/books](http://localhost:5173/#/books)
+* [http://localhost:5173/](http://localhost:5173/)
 
 ### 8.2 Настройка API baseURL
 
@@ -281,67 +272,63 @@ npm run dev
 VITE_API_BASE_URL=http://127.0.0.1:8000/api/v1
 ```
 
-### 8.3 HTTPS для Telegram Mini App
+### 8.3 Важно про CORS
 
-Telegram в проде требует **HTTPS** URL для Mini App.
+Если при логине/регистрации в miniapp появляется `Failed to fetch`, проверь, что в API включён CORS для:
 
-Самый простой вариант для dev — поднять туннель на локальный Vite:
-
-* cloudflared / ngrok → получить `https://...` → поставить в `MINIAPP_URL` у бота и/или в BotFather.
+* `http://localhost:5173`
+* `http://127.0.0.1:5173`
 
 ---
 
 ## 9. Troubleshooting
 
-### 9.1 Alembic: "can't locate revision", миграции не применяются
+### 9.1 Alembic: миграции не применяются / “can't locate revision”
 
-* Проверь, что `alembic.ini` и `alembic/` попадают в контейнер и путь верный.
-* Выполни миграции вручную:
+* Запусти миграции вручную:
 
 ```powershell
 docker compose -f .\infra\docker-compose.stack.yml exec api alembic upgrade head
 ```
 
-* Если после git pull миграций стало больше — пересобери API:
+* Проверь, что `alembic.ini` и `alembic/` доступны контейнеру (volumes).
 
-```powershell
-docker compose -f .\infra\docker-compose.stack.yml up -d --build api
-```
+### 9.2 CORS / OPTIONS 405 / Failed to fetch (miniapp)
 
-### 9.2 CORS / OPTIONS 405 / "Failed to fetch" в miniapp
+Симптомы:
 
-* Это означает, что браузер делает preflight OPTIONS, а сервер не отвечает корректно.
-* Включи `CORSMiddleware` в FastAPI и добавь origin:
+* в логах API: `OPTIONS /auth/login 405`
+* в браузере: `Failed to fetch`
 
-  * `http://localhost:5173`
-  * `http://127.0.0.1:5173`
-* Перезапусти API контейнер.
+Решение:
 
-### 9.3 Порты заняты (5173 / 8000 / 5432 / 5050)
+* Включить `CORSMiddleware` и разрешить origin `localhost:5173`.
 
-Проверить кто занял порт:
+### 9.3 Порты заняты (5173 / 8000 / 5432 / 5050 / 5433)
+
+Проверить порт 5173:
 
 ```powershell
 netstat -ano | findstr :5173
-tasklist /FI "PID eq 12345"
-taskkill /PID 12345 /F
+tasklist /FI "PID eq <PID>"
+taskkill /PID <PID> /F
 ```
 
-Или запусти Vite на другом порту:
+Запустить miniapp на другом порту:
 
 ```powershell
 npm run dev -- --port 5174
 ```
 
-### 9.4 Ошибки env / pydantic-settings (extra_forbidden / parse errors)
+### 9.4 Ошибки env (pydantic-settings / validation / extra_forbidden)
 
-* Убедись, что переменные в `.env` соответствуют полям Settings.
-* Рекомендуется выставить `extra="ignore"` в Settings, чтобы новые переменные не ломали запуск.
-* Для списков (CORS) проще хранить CSV строкой и парсить вручную.
+* Проверь `.env` файлы и названия переменных.
+* Рекомендуется, чтобы Settings имел `extra="ignore"` (чтобы новые env не ломали запуск).
+* При запуске в Docker проверь, что `DATABASE_URL` указывает на `db:5432`, а локально — на `127.0.0.1:5432`.
 
-### 9.5 DB недоступна / auth errors
+### 9.5 База недоступна / API не стартует
 
-* Проверь состояние сервисов:
+Проверь состояние:
 
 ```powershell
 docker compose -f .\infra\docker-compose.stack.yml ps
@@ -349,11 +336,9 @@ docker compose -f .\infra\docker-compose.stack.yml logs -f db
 docker compose -f .\infra\docker-compose.stack.yml logs -f api
 ```
 
-* Убедись, что `DATABASE_URL` внутри docker указывает на `db:5432`, а локально — на `localhost:5432`.
+### 9.6 Docker build: “parent snapshot … does not exist”
 
-### 9.6 "snapshot ... does not exist" при сборке Docker
-
-Это баг/битый build-cache. Решение:
+Это повреждённый build cache.
 
 ```powershell
 docker buildx prune -a -f
@@ -370,17 +355,11 @@ docker compose -f .\infra\docker-compose.stack.yml build --no-cache
 
 ## Полезные команды
 
-Остановить и удалить контейнеры:
+Полный рестарт стека:
 
 ```powershell
 docker compose -f .\infra\docker-compose.stack.yml down
-```
-
-Посмотреть логи:
-
-```powershell
-docker compose -f .\infra\docker-compose.stack.yml logs -f api
-docker compose -f .\infra\docker-compose.stack.yml logs -f bot
+docker compose -f .\infra\docker-compose.stack.yml up -d --build
 ```
 
 Зайти в контейнер API:
@@ -393,54 +372,54 @@ docker compose -f .\infra\docker-compose.stack.yml exec api sh
 
 ---
 
-## 2) PyCharm Run Configurations, которые стоит сохранить
+## 2) Run Configurations для PyCharm, которые стоит сохранить
 
-1) **API (local) — Uvicorn**
+1) **Docker Compose — Up (stack)**
+- Type: Docker Compose
+- Compose file: `A:\online-library\infra\docker-compose.stack.yml`
+- Command: `up -d --build`
+
+2) **Docker Compose — Down (stack)**
+- Type: Docker Compose
+- Compose file: `A:\online-library\infra\docker-compose.stack.yml`
+- Command: `down`
+
+3) **API (Local) — Uvicorn**
 - Type: Python
-- Module name: `uvicorn`
-- Parameters: `app.main:app --reload --host 127.0.0.1 --port 8000`
+- Module: `uvicorn`
+- Parameters: `app.main:app --reload --host 127.0.0.1 --port 8000` *(или 8001, если контейнер API не остановлен)*
 - Working directory: `A:\online-library\backend\src`
-- EnvFile: `A:\online-library\backend\.env`
+- Env file: `A:\online-library\backend\.env` *(или `.env.local`)*
 
-2) **Alembic upgrade head (local)**
+4) **Alembic upgrade head (Local)**
 - Type: Python
-- Module name: `alembic`
+- Module: `alembic`
 - Parameters: `upgrade head`
 - Working directory: `A:\online-library\backend`
-- EnvFile: `A:\online-library\backend\.env`
+- Env file: `A:\online-library\backend\.env`
 
-3) **Pytest (backend)**
+5) **CLI — set-role (Local)**
+- Type: Python
+- Script/Module: `app.cli`
+- Parameters: `set-role --email admin@example.com --role admin`
+- Working directory: `A:\online-library\backend\src`
+- Env file: `A:\online-library\backend\.env`
+
+6) **Pytest (backend)**
 - Type: Python tests → pytest
 - Target: `A:\online-library\backend`
 - Additional args: `-q`
-- EnvFile: `A:\online-library\backend\.env` (или отдельный `.env.test`)
+- Env vars (опционально): `TEST_DATABASE_URL=postgresql+asyncpg://postgres:postgres@127.0.0.1:5433/online_library_test`
 
-4) **Bot (local)**
+7) **Bot (Local, optional)**
 - Type: Python
-- Module name: `bot_app`
+- Module: `bot_app`
 - Working directory: `A:\online-library\bot\src`
-- EnvFile: `A:\online-library\bot\.env`
+- Env file: `A:\online-library\bot\.env`
 
-5) **Miniapp (npm dev)**
+8) **Miniapp — npm dev**
 - Type: npm
-- Package.json: `A:\online-library\miniapp\package.json`
+- package.json: `A:\online-library\miniapp\package.json`
 - Script: `dev`
-
-6) **Docker Compose Up (stack)**
-- Type: Docker Compose
-- File: `A:\online-library\infra\docker-compose.stack.yml`
-- Command: `up -d --build`
-
-7) **Docker Compose Down (stack)**
-- Type: Docker Compose
-- File: `A:\online-library\infra\docker-compose.stack.yml`
-- Command: `down`
-
-8) (Опционально) **Docker Logs API**
-- Type: Shell Script / External tool
-- Command: `docker compose -f .\infra\docker-compose.stack.yml logs -f api`
-- Working directory: `A:\online-library`
-
-Если хочешь, могу ещё добавить “API in Docker (exec uvicorn)”, но обычно хватает стандартного compose.
-::contentReference[oaicite:0]{index=0}
+- (optional) Node parameters / args: `-- --port 5173`
 ```
