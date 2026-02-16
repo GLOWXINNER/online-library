@@ -21,6 +21,6 @@ export type BookCreateRequest = {
   description?: string | null;
   year: number;
   isbn?: string | null;
-  authors: string[]; // учебно: вводим именами
+  authors: string[];
   genres: string[];
 };

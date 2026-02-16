@@ -1,0 +1,17 @@
+.box {
+  border: 1px dashed rgba(232,238,252,0.18);
+  border-radius: 14px;
+  padding: 14px;
+  color: var(--muted);
+  background: rgba(18, 26, 42, 0.35);
+}
+.title {
+  font-weight: 750;
+  color: var(--text);
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.text {
+  font-size: 13px;
+  line-height: 1.35;
+}

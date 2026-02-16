@@ -10,9 +10,7 @@ export function useTelegramBackButton() {
   useEffect(() => {
     if (!webApp) return;
 
-    // Показываем BackButton не на “главных” страницах
     const show = !["/books", "/login", "/register"].includes(loc.pathname);
-
     const handler = () => nav(-1);
 
     if (show) {

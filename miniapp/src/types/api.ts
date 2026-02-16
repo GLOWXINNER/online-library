@@ -12,5 +12,6 @@ export class ApiError extends Error {
 export function extractErrorMessage(body: any): string {
   if (!body) return "Request failed";
   if (typeof body.detail === "string") return body.detail;
+  if (typeof body.message === "string") return body.message;
   return "Request failed";
 }

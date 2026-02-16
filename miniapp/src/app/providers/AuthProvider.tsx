@@ -18,6 +18,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  // memory-часть
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserMe | null>(null);
   const [loading, setLoading] = useState(true);
@@ -36,20 +37,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const me = await meApi(token);
       setUser(me);
-    } catch (e: any) {
-      // токен мог истечь/быть невалидным
+    } catch {
+      // токен истёк/невалиден
       logout();
     }
   };
 
+  // boot: поднимаем токен из localStorage (учебный вариант)
+  // Риск localStorage: при XSS токен можно украсть.
   useEffect(() => {
     const saved = localStorage.getItem(LS_KEY);
     if (saved) setToken(saved);
     setLoading(false);
   }, []);
 
+  // если токен меняется — сохраняем и тянем /me
   useEffect(() => {
-    // при изменении токена — подтягиваем /me
     if (!token) {
       setUser(null);
       return;

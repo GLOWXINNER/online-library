@@ -1,0 +1,43 @@
+.host {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  gap: 10px;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.toast {
+  width: min(360px, calc(100vw - 28px));
+  padding: 12px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(18, 26, 42, 0.90);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow);
+}
+
+.title {
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.msg {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.success {
+  border-color: rgba(92,255,176,0.26);
+}
+
+.error {
+  border-color: rgba(255,95,109,0.28);
+}
+
+.info {
+  border-color: rgba(110,168,255,0.26);
+}

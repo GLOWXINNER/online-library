@@ -1,0 +1,21 @@
+.alert {
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  background: rgba(18, 26, 42, 0.70);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.error {
+  border-color: rgba(255,95,109,0.28);
+}
+
+.success {
+  border-color: rgba(92,255,176,0.26);
+}
+
+.info {
+  border-color: rgba(110,168,255,0.26);
+}
