@@ -1,4 +1,4 @@
-import React from "react";
+import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
 
@@ -8,7 +8,7 @@ import { ToastProvider } from "./app/providers/ToastProvider";
 import { ErrorBoundary } from "./app/ErrorBoundary";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
+  <StrictMode>
     <ErrorBoundary>
       <ToastProvider>
         <AuthProvider>
@@ -16,5 +16,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         </AuthProvider>
       </ToastProvider>
     </ErrorBoundary>
-  </React.StrictMode>
+  </StrictMode>
 );

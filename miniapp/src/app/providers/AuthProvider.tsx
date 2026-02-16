@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { UserMe } from "../../types/user";
 import { loginApi, meApi, registerApi } from "../../api/auth";
 
@@ -17,8 +17,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // memory-часть
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserMe | null>(null);
   const [loading, setLoading] = useState(true);
@@ -38,20 +37,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const me = await meApi(token);
       setUser(me);
     } catch {
-      // токен истёк/невалиден
       logout();
     }
   };
 
-  // boot: поднимаем токен из localStorage (учебный вариант)
-  // Риск localStorage: при XSS токен можно украсть.
   useEffect(() => {
     const saved = localStorage.getItem(LS_KEY);
     if (saved) setToken(saved);
     setLoading(false);
   }, []);
 
-  // если токен меняется — сохраняем и тянем /me
   useEffect(() => {
     if (!token) {
       setUser(null);
@@ -69,7 +64,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (email: string, password: string) => {
     await registerApi({ email, password });
-    // учебно: после регистрации сразу логинимся
     await login(email, password);
   };
 

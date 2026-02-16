@@ -1,4 +1,4 @@
-import React from "react";
+import type { ReactNode } from "react";
 import { Navigate, createHashRouter } from "react-router-dom";
 import { Layout } from "./layout/Layout";
 import { LoginPage } from "../pages/LoginPage";
@@ -9,14 +9,14 @@ import { FavoritesPage } from "../pages/FavoritesPage";
 import { AdminPage } from "../pages/AdminPage";
 import { useAuth } from "./providers/AuthProvider";
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
+function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthed, loading } = useAuth();
   if (loading) return <div style={{ padding: 16 }}>Loading...</div>;
   if (!isAuthed) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
-function RequireAdmin({ children }: { children: React.ReactNode }) {
+function RequireAdmin({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <div style={{ padding: 16 }}>Loading...</div>;
   if (!user) return <Navigate to="/login" replace />;

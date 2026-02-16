@@ -39,3 +39,19 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        # если будешь открывать по LAN-адресу:
+        "http://192.168.1.63:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

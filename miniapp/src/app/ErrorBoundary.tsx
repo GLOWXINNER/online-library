@@ -1,16 +1,16 @@
-import React from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 
+type Props = { children: ReactNode };
 type State = { error: Error | null };
 
-export class ErrorBoundary extends React.Component<{ children: React.ReactNode }, State> {
+export class ErrorBoundary extends Component<Props, State> {
   state: State = { error: null };
 
   static getDerivedStateFromError(error: Error): State {
     return { error };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // Логи в консоль для деталей
+  componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("App crashed:", error);
     console.error("Component stack:", info.componentStack);
   }
@@ -20,9 +20,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
       return (
         <div style={{ padding: 16, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto" }}>
           <h2 style={{ margin: "0 0 10px 0" }}>Ошибка в приложении</h2>
-          <p style={{ opacity: 0.8, marginTop: 0 }}>
-            Открой DevTools → Console, там будет стек.
-          </p>
+          <p style={{ opacity: 0.8, marginTop: 0 }}>Открой DevTools → Console, там будет стек.</p>
           <pre
             style={{
               whiteSpace: "pre-wrap",
