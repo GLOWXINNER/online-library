@@ -34,6 +34,7 @@ async def main() -> None:
 
     dp["api_client"] = api_client
     dp["session_store"] = session_store
+    dp["settings"] = settings  # ✅ добавили
 
     dp.include_router(start_router)
     dp.include_router(auth_router)
