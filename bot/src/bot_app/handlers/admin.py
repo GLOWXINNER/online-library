@@ -3,31 +3,95 @@ import time
 from pathlib import Path
 
 from aiogram import Router, F
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, FSInputFile
 
 from bot_app.api.client import LibraryApiClient, ApiError
+from bot_app.config import Settings
 from bot_app.fsm.admin_states import AdminAddBookFSM, AdminDeleteBookFSM
-from bot_app.keyboards.main_menu import guest_menu_kb, user_menu_kb, cancel_kb, confirm_kb
+from bot_app.keyboards.main_menu import (
+    guest_menu_kb,
+    user_menu_kb,
+    admin_menu_kb,
+    cancel_kb,
+    confirm_kb,
+)
 from bot_app.storage.session_store import InMemorySessionStore
 
 router = Router()
 
 
-async def _ensure_admin(message: Message, session_store: InMemorySessionStore) -> bool:
+async def _ensure_admin(
+    message: Message,
+    api_client: LibraryApiClient,
+    session_store: InMemorySessionStore,
+) -> bool:
     token = await session_store.get_token(message.from_user.id)
     if not token:
         await message.answer("🔐 Нужно войти.", reply_markup=guest_menu_kb())
         return False
-    if not await session_store.is_admin(message.from_user.id):
-        await message.answer("⛔ Недостаточно прав. Требуется роль admin.")
+
+    # ВСЕГДА обновляем роль с API (если роль меняли после логина — бот это увидит)
+    try:
+        role = await api_client.detect_role(token)
+        await session_store.set_role(message.from_user.id, role)
+    except Exception:
+        role = await session_store.get_role(message.from_user.id)
+
+    if role != "admin":
+        await message.answer(f"⛔ Недостаточно прав. Текущая роль: {role or 'не определена'}. Требуется admin.")
         return False
+
     return True
 
 
+@router.message(Command("admin"))
+async def admin_menu_cmd(
+    message: Message,
+    api_client: LibraryApiClient,
+    session_store: InMemorySessionStore,
+) -> None:
+    if not await _ensure_admin(message, api_client, session_store):
+        return
+    await message.answer("🛠 Админ-меню:", reply_markup=admin_menu_kb())
+
+
+@router.message(F.text == "🛠 Админ")
+async def admin_menu_btn(
+    message: Message,
+    api_client: LibraryApiClient,
+    session_store: InMemorySessionStore,
+) -> None:
+    if not await _ensure_admin(message, api_client, session_store):
+        return
+    await message.answer("🛠 Админ-меню:", reply_markup=admin_menu_kb())
+
+
+@router.message(F.text == "⬅️ Назад")
+async def admin_back(
+    message: Message,
+    session_store: InMemorySessionStore,
+    settings: Settings,
+) -> None:
+    role = await session_store.get_role(message.from_user.id)
+    token = await session_store.get_token(message.from_user.id)
+    miniapp_url = str(settings.miniapp_url) if settings.miniapp_url else None
+
+    if token:
+        await message.answer("Меню:", reply_markup=user_menu_kb(is_admin=(role == "admin"), miniapp_url=miniapp_url))
+    else:
+        await message.answer("Меню:", reply_markup=guest_menu_kb(miniapp_url))
+
+
 @router.message(F.text == "➕ Добавить книгу")
-async def admin_add_book_start(message: Message, state: FSMContext, session_store: InMemorySessionStore) -> None:
-    if not await _ensure_admin(message, session_store):
+async def admin_add_book_start(
+    message: Message,
+    state: FSMContext,
+    api_client: LibraryApiClient,
+    session_store: InMemorySessionStore,
+) -> None:
+    if not await _ensure_admin(message, api_client, session_store):
         return
     await state.clear()
     await state.set_state(AdminAddBookFSM.title)
@@ -98,29 +162,25 @@ async def admin_add_book_genres(message: Message, state: FSMContext) -> None:
     await state.set_state(AdminAddBookFSM.confirm)
 
     data = await state.get_data()
-    title = data["title"]
-    year = data["year"]
-    authors = data["authors"]
-
     await message.answer(
         "Проверьте данные:\n\n"
-        f"Title: {title}\n"
-        f"Year: {year}\n"
-        f"Authors: {authors}\n"
-        f"Genres: {genres}\n\n"
+        f"Title: {data['title']}\n"
+        f"Year: {data['year']}\n"
+        f"Authors: {data['authors']}\n"
+        f"Genres: {data['genres']}\n\n"
         "Подтвердите создание книги:",
         reply_markup=confirm_kb(),
     )
 
 
-@router.message(AdminAddBookFSM.confirm, F.text == "✅ Да")
+@router.message(AdminAddBookFSM.confirm, F.text.in_({"✅ Да", "✅ Подтвердить"}))
 async def admin_add_book_confirm_yes(
     message: Message,
     state: FSMContext,
     api_client: LibraryApiClient,
     session_store: InMemorySessionStore,
 ) -> None:
-    if not await _ensure_admin(message, session_store):
+    if not await _ensure_admin(message, api_client, session_store):
         await state.clear()
         return
 
@@ -149,19 +209,23 @@ async def admin_add_book_confirm_yes(
     await state.clear()
     await message.answer(
         f"✅ Книга создана!\nID: {created.id}\nTitle: {created.title}",
-        reply_markup=user_menu_kb(is_admin=True),
+        reply_markup=admin_menu_kb(),
     )
 
 
 @router.message(AdminAddBookFSM.confirm)
 async def admin_add_book_confirm_other(message: Message) -> None:
-    # Не очищаем state, чтобы пользователь не терял введённые данные
     await message.answer("Нажмите «✅ Да» для создания или «❌ Отмена».", reply_markup=confirm_kb())
 
 
 @router.message(F.text == "🗑 Удалить книгу")
-async def admin_delete_book_start(message: Message, state: FSMContext, session_store: InMemorySessionStore) -> None:
-    if not await _ensure_admin(message, session_store):
+async def admin_delete_book_start(
+    message: Message,
+    state: FSMContext,
+    api_client: LibraryApiClient,
+    session_store: InMemorySessionStore,
+) -> None:
+    if not await _ensure_admin(message, api_client, session_store):
         return
     await state.clear()
     await state.set_state(AdminDeleteBookFSM.book_id)
@@ -175,7 +239,7 @@ async def admin_delete_book_do(
     api_client: LibraryApiClient,
     session_store: InMemorySessionStore,
 ) -> None:
-    if not await _ensure_admin(message, session_store):
+    if not await _ensure_admin(message, api_client, session_store):
         await state.clear()
         return
 
@@ -203,7 +267,7 @@ async def admin_delete_book_do(
         return
 
     await state.clear()
-    await message.answer(f"✅ Книга id={book_id} удалена.", reply_markup=user_menu_kb(is_admin=True))
+    await message.answer(f"✅ Книга id={book_id} удалена.", reply_markup=admin_menu_kb())
 
 
 @router.message(F.text == "⬇️ Экспорт CSV")
@@ -212,7 +276,7 @@ async def admin_export_csv(
     api_client: LibraryApiClient,
     session_store: InMemorySessionStore,
 ) -> None:
-    if not await _ensure_admin(message, session_store):
+    if not await _ensure_admin(message, api_client, session_store):
         return
 
     token = await session_store.get_token(message.from_user.id)
@@ -242,3 +306,4 @@ async def admin_export_csv(
         document=FSInputFile(path),
         caption="⬇️ Экспорт книг в CSV",
     )
+    await message.answer("Админ-меню:", reply_markup=admin_menu_kb())

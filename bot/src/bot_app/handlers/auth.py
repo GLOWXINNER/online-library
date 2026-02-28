@@ -1,13 +1,17 @@
 from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
+from aiogram.filters import StateFilter
 
 from bot_app.api.client import LibraryApiClient, ApiError
+from bot_app.config import Settings
 from bot_app.fsm.auth_states import RegisterFSM, LoginFSM
 from bot_app.keyboards.main_menu import guest_menu_kb, user_menu_kb, cancel_kb
 from bot_app.storage.session_store import InMemorySessionStore
 
 router = Router()
+
+CANCEL_TEXT = "❌ Отмена"
 
 
 def _normalize_email(email: str) -> str:
@@ -18,7 +22,38 @@ def _looks_like_email(email: str) -> bool:
     return "@" in email and "." in email and len(email) >= 5
 
 
-@router.message(F.text == "📝 Регистрация")
+async def _cancel_and_show_menu(
+    message: Message,
+    state: FSMContext,
+    session_store: InMemorySessionStore,
+    settings: Settings,
+) -> None:
+    await state.clear()
+    role = await session_store.get_role(message.from_user.id)
+    token = await session_store.get_token(message.from_user.id)
+    miniapp_url = str(settings.miniapp_url) if settings.miniapp_url else None
+
+    if token:
+        await message.answer(
+            "Отменено.",
+            reply_markup=user_menu_kb(is_admin=(role == "admin"), miniapp_url=miniapp_url),
+        )
+    else:
+        await message.answer("Отменено.", reply_markup=guest_menu_kb(miniapp_url))
+
+
+# ВАЖНО: отмена в любом состоянии
+@router.message(StateFilter("*"), F.text == CANCEL_TEXT)
+async def cancel_any_state(
+    message: Message,
+    state: FSMContext,
+    session_store: InMemorySessionStore,
+    settings: Settings,
+) -> None:
+    await _cancel_and_show_menu(message, state, session_store, settings)
+
+
+@router.message(F.text.in_({"📝 Регистрация", "🆕 Регистрация"}))
 async def register_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(RegisterFSM.email)
@@ -26,7 +61,16 @@ async def register_start(message: Message, state: FSMContext) -> None:
 
 
 @router.message(RegisterFSM.email)
-async def register_email(message: Message, state: FSMContext) -> None:
+async def register_email(
+    message: Message,
+    state: FSMContext,
+    session_store: InMemorySessionStore,
+    settings: Settings,
+) -> None:
+    if (message.text or "").strip() == CANCEL_TEXT:
+        await _cancel_and_show_menu(message, state, session_store, settings)
+        return
+
     email = _normalize_email(message.text or "")
     if not _looks_like_email(email):
         await message.answer("Похоже на неверный email. Попробуйте ещё раз:")
@@ -34,14 +78,24 @@ async def register_email(message: Message, state: FSMContext) -> None:
 
     await state.update_data(email=email)
     await state.set_state(RegisterFSM.password)
-    await message.answer("Введите пароль (минимум 6 символов):", reply_markup=cancel_kb())
+    await message.answer("Введите пароль (минимум 8 символов):", reply_markup=cancel_kb())
 
 
 @router.message(RegisterFSM.password)
-async def register_password(message: Message, state: FSMContext, api_client: LibraryApiClient) -> None:
+async def register_password(
+    message: Message,
+    state: FSMContext,
+    api_client: LibraryApiClient,
+    session_store: InMemorySessionStore,
+    settings: Settings,
+) -> None:
+    if (message.text or "").strip() == CANCEL_TEXT:
+        await _cancel_and_show_menu(message, state, session_store, settings)
+        return
+
     password = (message.text or "").strip()
-    if len(password) < 6:
-        await message.answer("Пароль слишком короткий. Введите пароль (минимум 6 символов):")
+    if len(password) < 8:
+        await message.answer("Пароль слишком короткий. Введите пароль (минимум 8 символов):")
         return
 
     data = await state.get_data()
@@ -51,15 +105,20 @@ async def register_password(message: Message, state: FSMContext, api_client: Lib
         await api_client.register(email=email, password=password)
     except ApiError as e:
         details = f"\n\nДетали: {e.payload}" if e.payload else ""
-        await message.answer(f"Не удалось зарегистрироваться (status={e.status_code}).{details}", reply_markup=guest_menu_kb())
+        miniapp_url = str(settings.miniapp_url) if settings.miniapp_url else None
+        await message.answer(
+            f"Не удалось зарегистрироваться (status={e.status_code}).{details}",
+            reply_markup=guest_menu_kb(miniapp_url),
+        )
         await state.clear()
         return
 
     await state.clear()
-    await message.answer("✅ Регистрация успешна!\n\nТеперь нажмите «🔑 Вход».", reply_markup=guest_menu_kb())
+    miniapp_url = str(settings.miniapp_url) if settings.miniapp_url else None
+    await message.answer("✅ Регистрация успешна!\n\nТеперь нажмите «🔑 Вход».", reply_markup=guest_menu_kb(miniapp_url))
 
 
-@router.message(F.text == "🔑 Вход")
+@router.message(F.text.in_({"🔑 Вход", "🔐 Войти"}))
 async def login_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(LoginFSM.email)
@@ -67,7 +126,16 @@ async def login_start(message: Message, state: FSMContext) -> None:
 
 
 @router.message(LoginFSM.email)
-async def login_email(message: Message, state: FSMContext) -> None:
+async def login_email(
+    message: Message,
+    state: FSMContext,
+    session_store: InMemorySessionStore,
+    settings: Settings,
+) -> None:
+    if (message.text or "").strip() == CANCEL_TEXT:
+        await _cancel_and_show_menu(message, state, session_store, settings)
+        return
+
     email = _normalize_email(message.text or "")
     if not _looks_like_email(email):
         await message.answer("Похоже на неверный email. Попробуйте ещё раз:")
@@ -84,10 +152,19 @@ async def login_password(
     state: FSMContext,
     api_client: LibraryApiClient,
     session_store: InMemorySessionStore,
+    settings: Settings,
 ) -> None:
+    if (message.text or "").strip() == CANCEL_TEXT:
+        await _cancel_and_show_menu(message, state, session_store, settings)
+        return
+
     password = (message.text or "").strip()
     if not password:
         await message.answer("Пароль не может быть пустым. Введите пароль:")
+        return
+
+    if len(password) < 8:
+        await message.answer("Пароль должен быть минимум 8 символов. Введите пароль:")
         return
 
     data = await state.get_data()
@@ -96,44 +173,38 @@ async def login_password(
     try:
         token = await api_client.login(email=email, password=password)
     except ApiError as e:
+        miniapp_url = str(settings.miniapp_url) if settings.miniapp_url else None
         if e.status_code == 401:
-            await message.answer("❌ Неверный email или пароль.", reply_markup=guest_menu_kb())
+            await message.answer("❌ Неверный email или пароль.", reply_markup=guest_menu_kb(miniapp_url))
         else:
             details = f"\n\nДетали: {e.payload}" if e.payload else ""
-            await message.answer(f"Не удалось выполнить вход (status={e.status_code}).{details}", reply_markup=guest_menu_kb())
+            await message.answer(
+                f"Не удалось выполнить вход (status={e.status_code}).{details}",
+                reply_markup=guest_menu_kb(miniapp_url),
+            )
         await state.clear()
         return
 
     user_id = message.from_user.id
     await session_store.set_token(user_id, token.access_token)
 
-    # определяем роль (по /auth/me или fallback claim role)
     try:
         role = await api_client.detect_role(token.access_token)
     except Exception:
         role = None
 
     await session_store.set_role(user_id, role)
-
     await state.clear()
+
+    miniapp_url = str(settings.miniapp_url) if settings.miniapp_url else None
     await message.answer(
         f"✅ Вход выполнен!\nРоль: {role or 'не определена'}",
-        reply_markup=user_menu_kb(is_admin=(role == "admin")),
+        reply_markup=user_menu_kb(is_admin=(role == "admin"), miniapp_url=miniapp_url),
     )
 
 
-@router.message(F.text == "❌ Отмена")
-async def cancel(message: Message, state: FSMContext, session_store: InMemorySessionStore) -> None:
-    await state.clear()
-    role = await session_store.get_role(message.from_user.id)
-    token = await session_store.get_token(message.from_user.id)
-    if token:
-        await message.answer("Отменено.", reply_markup=user_menu_kb(is_admin=(role == "admin")))
-    else:
-        await message.answer("Отменено.", reply_markup=guest_menu_kb())
-
-
 @router.message(F.text == "🚪 Выйти")
-async def logout(message: Message, session_store: InMemorySessionStore) -> None:
+async def logout(message: Message, session_store: InMemorySessionStore, settings: Settings) -> None:
     await session_store.clear(message.from_user.id)
-    await message.answer("Вы вышли из аккаунта.", reply_markup=guest_menu_kb())
+    miniapp_url = str(settings.miniapp_url) if settings.miniapp_url else None
+    await message.answer("Вы вышли из аккаунта.", reply_markup=guest_menu_kb(miniapp_url))
